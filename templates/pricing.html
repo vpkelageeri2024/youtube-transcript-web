@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Pricing for YouTube Transcript Generator. Unlimited transcripts, API access, and more.">
+    <title>Pricing | YouTube Transcript Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💎</text></svg>">
+    <style>
+        .pricing-header {
+            text-align: center;
+            margin-bottom: 48px;
+            animation: fadeInDown 0.6s ease-out;
+        }
+
+        .pricing-title {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+
+        .pricing-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 48px;
+        }
+
+        .pricing-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            animation: fadeInUp 0.6s ease-out backwards;
+            backdrop-filter: blur(20px);
+        }
+
+        .pricing-card:nth-child(1) { animation-delay: 0.1s; }
+        .pricing-card:nth-child(2) { animation-delay: 0.2s; }
+        .pricing-card:nth-child(3) { animation-delay: 0.3s; }
+
+        .pricing-card--popular {
+            border-color: var(--accent-purple);
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(139, 92, 246, 0.15);
+            z-index: 2;
+        }
+
+        .popular-badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--gradient-primary);
+            color: white;
+            padding: 4px 16px;
+            border-radius: var(--radius-full);
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .plan-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .plan-price {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+        }
+
+        .plan-price span {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .plan-features {
+            list-style: none;
+            margin-bottom: 32px;
+            flex: 1;
+        }
+
+        .plan-feature {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .feature-icon {
+            color: var(--accent-green);
+            flex-shrink: 0;
+        }
+
+        .btn-subscribe {
+            width: 100%;
+        }
+
+        .free-tier-notice {
+            text-align: center;
+            padding: 16px;
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: var(--radius-lg);
+            margin-bottom: 48px;
+            color: var(--accent-purple-light);
+            font-size: 0.95rem;
+            font-weight: 500;
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        @media (max-width: 768px) {
+            .pricing-card--popular {
+                transform: scale(1);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Background Effects -->
+    <div class="bg-effects">
+        <div class="bg-orb bg-orb--purple"></div>
+        <div class="bg-orb bg-orb--pink"></div>
+        <div class="bg-grid"></div>
+    </div>
+
+    <div class="app">
+
+        <!-- Navigation -->
+        <a href="/" class="nav-link" style="margin-bottom: 32px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Back to Home
+        </a>
+
+        <!-- Header -->
+        <header class="pricing-header">
+            <h1 class="pricing-title">Simple, transparent pricing</h1>
+            <p class="pricing-subtitle">Unlock the full potential of YouTube Transcript Generator</p>
+        </header>
+
+        <!-- Free Tier Callout -->
+        <div class="free-tier-notice">
+            ✨ <strong>Start for free:</strong> Get 3 transcripts per day, completely free. No credit card required.
+        </div>
+
+        <!-- Pricing Grid -->
+        <div class="pricing-grid" id="pricingGrid">
+            <!-- Populated by JS -->
+            <div style="text-align: center; grid-column: 1/-1; color: var(--text-muted);">
+                Loading plans...
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>YouTube Transcript Generator — Built with ❤️ by Vishal</p>
+        </footer>
+
+    </div>
+
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+                renderPlans(config.plans, config.razorpay_key_id);
+            } catch (err) {
+                document.getElementById('pricingGrid').innerHTML = '<p style="color: var(--accent-red); text-align: center; grid-column: 1/-1;">Failed to load pricing plans. Please try again later.</p>';
+            }
+        });
+
+        function renderPlans(plans, rzpKeyId) {
+            const grid = document.getElementById('pricingGrid');
+            grid.innerHTML = '';
+
+            const planOrder = ['basic', 'pro', 'unlimited'];
+
+            planOrder.forEach(planId => {
+                const plan = plans[planId];
+                if (!plan) return;
+
+                const isPopular = planId === 'pro';
+                
+                const card = document.createElement('div');
+                card.className = `pricing-card ${isPopular ? 'pricing-card--popular' : ''}`;
+                
+                let html = '';
+                if (isPopular) {
+                    html += `<div class="popular-badge">Most Popular</div>`;
+                }
+
+                html += `
+                    <div class="plan-name">${plan.name}</div>
+                    <div class="plan-price">${plan.price_display}</div>
+                    <ul class="plan-features">
+                        ${plan.features.map(f => `
+                            <li class="plan-feature">
+                                <svg class="feature-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                                ${f}
+                            </li>
+                        `).join('')}
+                    </ul>
+                    <button class="btn ${isPopular ? 'btn--primary' : 'btn--secondary'} btn-subscribe" onclick="subscribe('${planId}', '${rzpKeyId}')">
+                        Get Started
+                    </button>
+                `;
+                
+                card.innerHTML = html;
+                grid.appendChild(card);
+            });
+        }
+
+        async function subscribe(planId, rzpKeyId) {
+            const btn = event.currentTarget;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="btn__spinner" style="display:inline-block"></span>';
+            btn.disabled = true;
+
+            try {
+                // 1. Create order
+                const res = await fetch('/api/create-order', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({plan: planId})
+                });
+                
+                const order = await res.json();
+                if (!res.ok) throw new Error(order.error || 'Failed to create order');
+
+                // 2. Open Razorpay
+                const options = {
+                    key: rzpKeyId,
+                    amount: order.amount,
+                    currency: 'INR',
+                    name: 'YouTube Transcript Generator',
+                    description: order.plan_name + ' Plan',
+                    order_id: order.order_id,
+                    handler: async function(response) {
+                        try {
+                            const verify = await fetch('/api/verify-payment', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify(response)
+                            });
+                            const result = await verify.json();
+                            if (result.status === 'success') {
+                                alert('Payment successful! Your plan is now active.');
+                                window.location.href = '/';
+                            } else {
+                                alert('Payment verification failed.');
+                            }
+                        } catch (e) {
+                            alert('Error verifying payment.');
+                        }
+                    },
+                    prefill: {
+                        name: '',
+                        email: '',
+                        contact: ''
+                    },
+                    theme: {
+                        color: '#8b5cf6'
+                    }
+                };
+
+                const rzp = new Razorpay(options);
+                rzp.on('payment.failed', function (response){
+                    alert(response.error.description);
+                });
+                rzp.open();
+
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Extract transcripts from YouTube videos instantly. Supports multiple languages, translation, and export to TXT, SRT, and JSON.">
+    <title>YouTube Transcript Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+</head>
+<body>
+
+    <!-- Background Effects -->
+    <div class="bg-effects">
+        <div class="bg-orb bg-orb--purple"></div>
+        <div class="bg-orb bg-orb--indigo"></div>
+        <div class="bg-orb bg-orb--pink"></div>
+        <div class="bg-grid"></div>
+    </div>
+
+    <div class="app">
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header__icon">🎬</div>
+            <h1 class="header__title">YouTube Transcript Generator</h1>
+            <p class="header__subtitle">Paste any YouTube link and get the full transcript instantly</p>
+        </header>
+
+        <!-- Input Card -->
+        <section class="input-card">
+
+            <!-- URL Input -->
+            <div class="url-group">
+                <label class="url-group__label" for="urlInput">YouTube URL</label>
+                <div class="url-group__wrapper">
+                    <span class="url-group__icon">🔗</span>
+                    <input
+                        type="url"
+                        id="urlInput"
+                        class="url-group__input"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+                </div>
+            </div>
+
+            <!-- Video Preview -->
+            <div class="video-preview" id="videoPreview">
+                <div class="video-preview__thumb">
+                    <img id="thumbImg" src="" alt="Video thumbnail">
+                    <div class="video-preview__overlay">
+                        <span class="video-preview__id" id="videoIdLabel"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options -->
+            <div class="options-row" style="margin-top: 20px;">
+                <div class="option-field">
+                    <label class="option-field__label" for="langInput">Language Code</label>
+                    <input
+                        type="text"
+                        id="langInput"
+                        class="option-field__input"
+                        placeholder="e.g. en, hi, es"
+                        maxlength="10"
+                    >
+                </div>
+                <div class="option-field">
+                    <label class="option-field__label" for="translateInput">Translate To</label>
+                    <input
+                        type="text"
+                        id="translateInput"
+                        class="option-field__input"
+                        placeholder="e.g. hi, fr, de"
+                        maxlength="10"
+                    >
+                </div>
+                <div class="option-field">
+                    <label class="option-field__label" for="formatSelect">Format</label>
+                    <select id="formatSelect" class="option-field__select">
+                        <option value="timestamped">Timestamped</option>
+                        <option value="text">Plain Text</option>
+                        <option value="srt">SRT Subtitles</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="actions">
+                <button class="btn btn--primary" id="fetchBtn">
+                    <span class="btn__spinner"></span>
+                    <span class="btn__text">⚡ Generate Transcript</span>
+                </button>
+                <button class="btn btn--secondary" id="langsBtn">
+                    <span class="btn__spinner"></span>
+                    <span class="btn__text">🌐 Languages</span>
+                </button>
+            </div>
+
+            <!-- Status -->
+            <div class="status" id="status"></div>
+
+        </section>
+
+        <!-- Languages Panel -->
+        <section class="langs-panel" id="langsPanel">
+            <div class="langs-card">
+                <h2 class="langs-card__title">🌐 Available Languages</h2>
+                <div class="langs-section">
+                    <p class="langs-section__label">Manually Created</p>
+                    <div class="langs-list" id="manualLangs"></div>
+                </div>
+                <div class="langs-section">
+                    <p class="langs-section__label">Auto-Generated</p>
+                    <div class="langs-list" id="generatedLangs"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Panel -->
+        <section class="results" id="results">
+
+            <div class="results__header">
+                <div class="results__meta">
+                    <h2 class="results__title">📝 Transcript</h2>
+                    <span class="results__badge" id="segmentCount"></span>
+                </div>
+                <div class="results__actions">
+                    <button class="btn--icon" id="copyBtn" onclick="copyTranscript()">📋 Copy</button>
+                    <button class="btn--icon" onclick="downloadTranscript()">⬇ Download</button>
+                </div>
+            </div>
+
+            <!-- View Tabs -->
+            <div class="view-tabs">
+                <button class="view-tab view-tab--active" data-tab="timestamped">Timestamped</button>
+                <button class="view-tab" data-tab="text">Text</button>
+                <button class="view-tab" data-tab="srt">SRT</button>
+                <button class="view-tab" data-tab="json">JSON</button>
+            </div>
+
+            <!-- Transcript Content -->
+            <div class="transcript-panel">
+                <div class="transcript-view transcript-view--active" data-view="timestamped">
+                    <div class="transcript-segments" id="timestampedView"></div>
+                </div>
+                <div class="transcript-view" data-view="text">
+                    <pre class="transcript-raw" id="textView"></pre>
+                </div>
+                <div class="transcript-view" data-view="srt">
+                    <pre class="transcript-raw" id="srtView"></pre>
+                </div>
+                <div class="transcript-view" data-view="json">
+                    <pre class="transcript-raw" id="jsonView"></pre>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>YouTube Transcript Generator — Built with ❤️ by Vishal</p>
+        </footer>
+
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <script src="{{ url_for('static', filename='script.js') }}?v=2"></script>
+</body>
+</html>
