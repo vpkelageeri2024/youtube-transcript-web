@@ -13,6 +13,7 @@ Then open http://localhost:5000 in your browser.
 
 import json
 import re
+import time
 import traceback
 from datetime import date
 from urllib.parse import urlparse, parse_qs
@@ -27,6 +28,7 @@ from youtube_transcript_api._errors import (
 )
 
 import config
+from proxy_manager import proxy_manager, MAX_RETRIES
 
 # ── Razorpay Setup ───────────────────────────────────────────────────────────
 
@@ -121,33 +123,72 @@ def sanitize_error(msg):
     return msg
 
 
-# ── Rate Limiting ────────────────────────────────────────────────────────────
+# ── YouTube Transcript API (with proxy-aware retry) ─────────────────────────
 
-usage_tracker = {}  # {ip: {'count': N, 'date': 'YYYY-MM-DD'}}
-
-
-def get_usage(ip):
-    today = str(date.today())
-    if ip not in usage_tracker or usage_tracker[ip]['date'] != today:
-        usage_tracker[ip] = {'count': 0, 'date': today}
-    return usage_tracker[ip]
-
-
-def check_rate_limit(ip):
-    info = get_usage(ip)
-    limit = config.FREE_DAILY_LIMIT
-    remaining = max(0, limit - info['count'])
-    return remaining > 0, remaining
+def _create_api_with_proxy(proxy_dict=None):
+    """Create a YouTubeTranscriptApi instance, optionally with proxy."""
+    if proxy_dict:
+        # The newer versions of youtube-transcript-api accept proxies via constructor
+        try:
+            return YouTubeTranscriptApi(proxies=proxy_dict)
+        except TypeError:
+            # Fallback for older versions that don't support proxies in constructor
+            return YouTubeTranscriptApi()
+    return YouTubeTranscriptApi()
 
 
-def increment_usage(ip):
-    info = get_usage(ip)
-    info['count'] += 1
+def fetch_with_retry(fetch_func, max_retries=MAX_RETRIES):
+    """
+    Execute a transcript fetch function with automatic proxy rotation and retry.
+    `fetch_func` receives a YouTubeTranscriptApi instance and should return the result.
+    """
+    last_error = None
 
+    for attempt in range(max_retries):
+        proxy_dict = proxy_manager.get_proxy()
+        ytt_api = _create_api_with_proxy(proxy_dict)
 
-# ── YouTube Transcript API ───────────────────────────────────────────────────
+        try:
+            # Throttle to avoid detection
+            if attempt > 0:
+                delay = proxy_manager.get_throttle_delay()
+                time.sleep(delay)
 
-ytt_api = YouTubeTranscriptApi()
+            result = fetch_func(ytt_api)
+            proxy_manager.mark_success(proxy_dict)
+            return result
+
+        except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable, StopIteration):
+            # These are legitimate errors, not IP bans — re-raise immediately
+            raise
+
+        except Exception as e:
+            last_error = e
+            error_msg = str(e).lower()
+
+            # Detect IP-related blocks
+            is_ip_block = any(kw in error_msg for kw in [
+                "ip", "blocked", "banned", "429", "too many",
+                "rate limit", "forbidden", "403", "captcha",
+                "consent", "cookie",
+            ])
+
+            if is_ip_block and proxy_dict:
+                proxy_manager.mark_failed(proxy_dict)
+                print(f"  🔄 Proxy blocked (attempt {attempt + 1}/{max_retries}), rotating...")
+                continue
+            elif is_ip_block and not proxy_dict:
+                # Direct connection blocked — try with proxy on next attempt
+                print(f"  🔄 Direct IP blocked (attempt {attempt + 1}/{max_retries}), trying proxy...")
+                continue
+            else:
+                # Non-IP error — retry once then give up
+                if attempt == 0:
+                    continue
+                raise
+
+    # All retries exhausted
+    raise last_error
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -159,17 +200,7 @@ def index():
 
 @app.route("/api/transcript", methods=["POST"])
 def get_transcript():
-    """Fetch transcript for a YouTube video (with rate limiting)."""
-    ip = request.remote_addr
-
-    # Check rate limit
-    allowed, remaining = check_rate_limit(ip)
-    if not allowed:
-        return jsonify({
-            "error": f"Daily free limit reached ({config.FREE_DAILY_LIMIT} transcripts/day). Upgrade your plan for more!",
-            "limit_reached": True,
-        }), 429
-
+    """Fetch transcript for a YouTube video (free, unlimited, with proxy rotation)."""
     data = request.get_json()
     url = data.get("url", "")
     lang = data.get("lang", "")
@@ -181,38 +212,34 @@ def get_transcript():
         return jsonify({"error": "Invalid YouTube URL. Please provide a valid YouTube video link."}), 400
 
     try:
-        transcript_list = ytt_api.list(video_id)
+        def do_fetch(ytt_api):
+            transcript_list = ytt_api.list(video_id)
 
-        if translate_to:
-            # Find source transcript, then translate
-            source_lang = [lang] if lang else ['en']
-            try:
-                transcript_obj = transcript_list.find_transcript(source_lang)
-            except NoTranscriptFound:
-                # Fall back to any available transcript
-                transcript_obj = next(iter(transcript_list))
-            translated = transcript_obj.translate(translate_to)
-            transcript = transcript_to_dicts(translated.fetch())
-            detected_lang = transcript_obj.language_code
-        elif lang:
-            # Fetch specific language
-            transcript_obj = transcript_list.find_transcript([lang])
-            transcript = transcript_to_dicts(transcript_obj.fetch())
-            detected_lang = lang
-        else:
-            # Auto-detect: try English first, then fall back to any available
-            try:
-                transcript_obj = transcript_list.find_transcript(['en'])
-            except NoTranscriptFound:
-                transcript_obj = next(iter(transcript_list))
-            transcript = transcript_to_dicts(transcript_obj.fetch())
-            detected_lang = transcript_obj.language_code
+            if translate_to:
+                source_lang = [lang] if lang else ['en']
+                try:
+                    transcript_obj = transcript_list.find_transcript(source_lang)
+                except NoTranscriptFound:
+                    transcript_obj = next(iter(transcript_list))
+                translated = transcript_obj.translate(translate_to)
+                transcript = transcript_to_dicts(translated.fetch())
+                detected_lang = transcript_obj.language_code
+            elif lang:
+                transcript_obj = transcript_list.find_transcript([lang])
+                transcript = transcript_to_dicts(transcript_obj.fetch())
+                detected_lang = lang
+            else:
+                try:
+                    transcript_obj = transcript_list.find_transcript(['en'])
+                except NoTranscriptFound:
+                    transcript_obj = next(iter(transcript_list))
+                transcript = transcript_to_dicts(transcript_obj.fetch())
+                detected_lang = transcript_obj.language_code
 
-        # Increment usage on success
-        increment_usage(ip)
-        _, remaining_after = check_rate_limit(ip)
+            return transcript, detected_lang
 
-        # Build response
+        transcript, detected_lang = fetch_with_retry(do_fetch)
+
         return jsonify({
             "video_id": video_id,
             "segments": len(transcript),
@@ -220,7 +247,6 @@ def get_transcript():
             "transcript": transcript,
             "text": transcript_to_text(transcript),
             "srt": transcript_to_srt(transcript),
-            "remaining": remaining_after,
         })
 
     except TranscriptsDisabled:
@@ -248,26 +274,26 @@ def get_languages():
         return jsonify({"error": "Invalid YouTube URL."}), 400
 
     try:
-        transcript_list = ytt_api.list(video_id)
+        def do_fetch(ytt_api):
+            transcript_list = ytt_api.list(video_id)
 
-        manual = []
-        generated = []
-        for t in transcript_list:
-            entry = {
-                "language": t.language,
-                "code": t.language_code,
-                "translatable": t.is_translatable,
-            }
-            if t.is_generated:
-                generated.append(entry)
-            else:
-                manual.append(entry)
+            manual = []
+            generated = []
+            for t in transcript_list:
+                entry = {
+                    "language": t.language,
+                    "code": t.language_code,
+                    "translatable": t.is_translatable,
+                }
+                if t.is_generated:
+                    generated.append(entry)
+                else:
+                    manual.append(entry)
 
-        return jsonify({
-            "video_id": video_id,
-            "manual": manual,
-            "generated": generated,
-        })
+            return {"video_id": video_id, "manual": manual, "generated": generated}
+
+        result = fetch_with_retry(do_fetch)
+        return jsonify(result)
 
     except Exception as e:
         msg = sanitize_error(str(e))
@@ -278,25 +304,10 @@ def get_languages():
 
 @app.route("/api/v1/transcript", methods=["GET"])
 def api_transcript():
-    """Public API endpoint for fetching transcripts."""
+    """Public API endpoint for fetching transcripts (free, unlimited)."""
     url = request.args.get("url", "")
     lang = request.args.get("lang", "")
     translate_to = request.args.get("translate", "")
-
-    # Check API key
-    api_key = request.headers.get("X-API-Key", "")
-    if api_key and api_key in config.API_KEYS:
-        # Authenticated — no rate limiting
-        pass
-    else:
-        # Fall back to IP-based rate limiting
-        ip = request.remote_addr
-        allowed, remaining = check_rate_limit(ip)
-        if not allowed:
-            return jsonify({
-                "error": f"Daily free limit reached ({config.FREE_DAILY_LIMIT} requests/day). Get an API key for higher limits.",
-                "limit_reached": True,
-            }), 429
 
     # Extract video ID
     video_id = extract_video_id(url)
@@ -304,33 +315,33 @@ def api_transcript():
         return jsonify({"error": "Invalid YouTube URL. Pass a valid URL via the 'url' query parameter."}), 400
 
     try:
-        transcript_list = ytt_api.list(video_id)
+        def do_fetch(ytt_api):
+            transcript_list = ytt_api.list(video_id)
 
-        if translate_to:
-            source_lang = [lang] if lang else ['en']
-            try:
-                transcript_obj = transcript_list.find_transcript(source_lang)
-            except NoTranscriptFound:
-                transcript_obj = next(iter(transcript_list))
-            translated = transcript_obj.translate(translate_to)
-            transcript = transcript_to_dicts(translated.fetch())
-            detected_lang = transcript_obj.language_code
-        elif lang:
-            transcript_obj = transcript_list.find_transcript([lang])
-            transcript = transcript_to_dicts(transcript_obj.fetch())
-            detected_lang = lang
-        else:
-            try:
-                transcript_obj = transcript_list.find_transcript(['en'])
-            except NoTranscriptFound:
-                transcript_obj = next(iter(transcript_list))
-            transcript = transcript_to_dicts(transcript_obj.fetch())
-            detected_lang = transcript_obj.language_code
+            if translate_to:
+                source_lang = [lang] if lang else ['en']
+                try:
+                    transcript_obj = transcript_list.find_transcript(source_lang)
+                except NoTranscriptFound:
+                    transcript_obj = next(iter(transcript_list))
+                translated = transcript_obj.translate(translate_to)
+                transcript = transcript_to_dicts(translated.fetch())
+                detected_lang = transcript_obj.language_code
+            elif lang:
+                transcript_obj = transcript_list.find_transcript([lang])
+                transcript = transcript_to_dicts(transcript_obj.fetch())
+                detected_lang = lang
+            else:
+                try:
+                    transcript_obj = transcript_list.find_transcript(['en'])
+                except NoTranscriptFound:
+                    transcript_obj = next(iter(transcript_list))
+                transcript = transcript_to_dicts(transcript_obj.fetch())
+                detected_lang = transcript_obj.language_code
 
-        # Increment usage for unauthenticated requests
-        if not (api_key and api_key in config.API_KEYS):
-            ip = request.remote_addr
-            increment_usage(ip)
+            return transcript, detected_lang
+
+        transcript, detected_lang = fetch_with_retry(do_fetch)
 
         return jsonify({
             "video_id": video_id,
@@ -442,9 +453,23 @@ def get_config():
     })
 
 
+# ── Proxy Status (Debug) ────────────────────────────────────────────────────
+
+@app.route("/api/proxy-status")
+def proxy_status():
+    """Debug endpoint to check proxy pool health."""
+    return jsonify({
+        "pool_size": proxy_manager.pool_size,
+        "available": proxy_manager.available_count,
+        "max_retries": MAX_RETRIES,
+        "status": "healthy" if proxy_manager.available_count > 0 else "direct",
+    })
+
+
 # ── Run ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("\n🎬 YouTube Transcript Generator")
-    print("   Open http://localhost:5000 in your browser\n")
+    print("\n🎬 YouTube Transcript Generator (Unlimited & Free)")
+    print("   Open http://localhost:5000 in your browser")
+    print(f"   Proxy pool: {proxy_manager.pool_size} proxies available\n")
     app.run(debug=True, host="0.0.0.0", port=5000)

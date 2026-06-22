@@ -188,12 +188,6 @@ function renderTranscript(data) {
     // Switch to default tab
     switchTab('timestamped');
 
-    // Update usage badge if data includes remaining info
-    if (data.remaining !== undefined && data.total !== undefined) {
-        updateUsageBadge(data.remaining, data.total);
-    } else if (data.remaining !== undefined) {
-        updateUsageBadge(data.remaining, data.remaining);
-    }
 
     // Show affiliate section
     loadAffiliateTools();
@@ -259,12 +253,6 @@ async function fetchTranscript() {
         const data = await res.json();
 
         if (!res.ok) {
-            // Check for rate limit (429)
-            if (res.status === 429) {
-                showUpgradeModal();
-                showStatus('Daily limit reached. Upgrade for more transcripts.', 'error');
-                return;
-            }
             showStatus(data.error || 'Something went wrong.', 'error');
             return;
         }

@@ -1,7 +1,8 @@
 import os
 
-# Rate Limiting
-FREE_DAILY_LIMIT = 3
+# Rate Limiting (disabled — app is now free & unlimited)
+# Kept for reference; the proxy_manager handles YouTube IP rotation instead.
+FREE_DAILY_LIMIT = 0  # Unused
 
 # Razorpay - Replace with actual keys from https://dashboard.razorpay.com/app/keys
 RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', 'rzp_test_T4MIOkYDvidlt9')
