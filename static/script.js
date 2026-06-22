@@ -137,68 +137,8 @@ function updateUsageBadge(remaining, total) {
     }
 }
 
-// ── Credit Badge ─────────────────────────────────────────────────────────
 
-function updateCreditBadge(credits, dailyLimit) {
-    const badge = document.getElementById('creditBadge');
-    const count = document.getElementById('creditCount');
-    if (!badge || !count) return;
-    
-    count.textContent = dailyLimit < 0 ? '∞' : credits;
-    badge.classList.remove('credit-badge--ok', 'credit-badge--warning', 'credit-badge--danger');
-    
-    if (dailyLimit < 0) {
-        badge.classList.add('credit-badge--ok');
-    } else if (credits > 3) {
-        badge.classList.add('credit-badge--ok');
-    } else if (credits > 0) {
-        badge.classList.add('credit-badge--warning');
-    } else {
-        badge.classList.add('credit-badge--danger');
-    }
-    
-    badge.classList.add('credit-badge--pulse');
-    setTimeout(() => badge.classList.remove('credit-badge--pulse'), 300);
-}
 
-async function fetchCredits() {
-    try {
-        const res = await fetch('/api/credits');
-        if (res.ok) {
-            const data = await res.json();
-            updateCreditBadge(data.credits, data.daily_limit);
-        }
-    } catch (err) {
-        // Silently fail — credit badge is non-critical
-    }
-}
-
-// ── Upgrade Modal ────────────────────────────────────────────────────────
-
-function showUpgradeModal() {
-    // Remove existing modal if any
-    const existing = document.querySelector('.modal-overlay');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.innerHTML = `
-        <div class="modal">
-            <div class="modal__icon">🪙</div>
-            <h2 class="modal__title">Out of Credits</h2>
-            <p class="modal__text">You've used all your credits for today. Each transcript costs 1 credit. Upgrade your plan to get more daily credits and unlock premium features.</p>
-            <a href="/pricing" class="modal__btn-primary">💎 Get More Credits</a>
-            <button class="modal__btn-dismiss" onclick="this.closest('.modal-overlay').remove()">Maybe Later</button>
-        </div>
-    `;
-
-    // Dismiss on backdrop click
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) overlay.remove();
-    });
-
-    document.body.appendChild(overlay);
-}
 
 // ── Render Transcript ────────────────────────────────────────────────────
 
@@ -365,11 +305,6 @@ async function fetchTranscript() {
 
         showStatus(`Fetched ${data.segments} segments for video ${data.video_id}`, 'success');
         renderTranscript(data);
-
-        // Update credit badge from response
-        if (data.remaining !== undefined && data.daily_limit !== undefined) {
-            updateCreditBadge(data.remaining, data.daily_limit);
-        }
 
     } catch (err) {
         showStatus(`Network error: ${err.message}`, 'error');
@@ -627,7 +562,6 @@ async function handleCredentialResponse(response) {
         if (res.ok) {
             const data = await res.json();
             renderUser(data.user);
-            fetchCredits(); 
             showToast("Successfully logged in!");
         } else {
             showStatus("Login failed.", "error");
@@ -655,7 +589,6 @@ async function logout() {
     try {
         await fetch('/api/auth/logout', { method: 'POST' });
         renderGoogleButton();
-        fetchCredits(); 
         showToast("Logged out");
     } catch (e) {}
 }
@@ -724,6 +657,5 @@ function loadHistoryItem(videoId, lang) {
 
 document.addEventListener('DOMContentLoaded', () => {
     // Fetch credit balance on page load
-    fetchCredits();
     initAuth();
 });

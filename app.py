@@ -33,15 +33,7 @@ from youtube_transcript_api._errors import (
 
 import config
 from proxy_manager import proxy_manager, MAX_RETRIES
-import credit_manager
-
-# ── Razorpay Setup ───────────────────────────────────────────────────────────
-
-try:
-    import razorpay
-    razorpay_client = razorpay.Client(auth=(config.RAZORPAY_KEY_ID, config.RAZORPAY_KEY_SECRET))
-except ImportError:
-    razorpay_client = None
+import history_manager
 
 # ── App ──────────────────────────────────────────────────────────────────────
 
@@ -256,7 +248,7 @@ def auth_history():
     user = session.get('user')
     if not user or 'email' not in user:
         return jsonify({"error": "Unauthorized"}), 401
-    history = credit_manager.get_history(user['email'])
+    history = history_manager.get_history(user['email'])
     return jsonify({"history": history})
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -266,28 +258,9 @@ def index():
     return render_template("index.html")
 
 
-@app.route("/api/credits", methods=["GET"])
-def get_credits():
-    """Return the current credit balance for the user's IP or email."""
-    identifier = get_user_identifier()
-    return jsonify(credit_manager.get_credits(identifier))
-
-
 @app.route("/api/transcript", methods=["POST"])
 def get_transcript():
-    """Fetch transcript for a YouTube video (with credit deduction)."""
-    identifier = get_user_identifier()
-
-    # Check credits
-    has_credits, remaining, daily_limit = credit_manager.use_credit(identifier)
-    if not has_credits:
-        return jsonify({
-            "error": "Out of credits. Upgrade your plan for more!",
-            "limit_reached": True,
-            "remaining": remaining,
-            "daily_limit": daily_limit,
-        }), 429
-
+    """Fetch transcript for a YouTube video."""
     data = request.get_json()
     url = data.get("url", "")
     lang = data.get("lang", "")
@@ -327,11 +300,6 @@ def get_transcript():
 
         transcript, detected_lang = fetch_with_retry(do_fetch)
 
-        # Save history if user is logged in
-        if '@' in identifier:
-            title = data.get("title") or get_video_title(video_id)
-            credit_manager.save_history(identifier, video_id, title)
-
         return jsonify({
             "video_id": video_id,
             "segments": len(transcript),
@@ -339,8 +307,6 @@ def get_transcript():
             "transcript": transcript,
             "text": transcript_to_text(transcript),
             "srt": transcript_to_srt(transcript),
-            "remaining": remaining,
-            "daily_limit": daily_limit,
         })
 
     except TranscriptsDisabled:
@@ -394,213 +360,11 @@ def get_languages():
         return jsonify({"error": msg}), 500
 
 
-# ── Public API ───────────────────────────────────────────────────────────────
-
-@app.route("/api/v1/transcript", methods=["GET"])
-def api_transcript():
-    """Public API endpoint for fetching transcripts (with credit checking)."""
-    url = request.args.get("url", "")
-    lang = request.args.get("lang", "")
-    translate_to = request.args.get("translate", "")
-
-    # Check API key
-    api_key = request.headers.get("X-API-Key", "")
-    
-    if api_key:
-        plan = credit_manager.get_plan_for_api_key(api_key)
-        if not plan:
-            return jsonify({"error": "Invalid API Key."}), 401
-        has_credits, remaining, daily_limit = credit_manager.use_credit(api_key, plan)
-    else:
-        identifier = get_user_identifier()
-        has_credits, remaining, daily_limit = credit_manager.use_credit(identifier)
-
-    if not has_credits:
-        return jsonify({
-            "error": "Out of credits.",
-            "limit_reached": True,
-            "remaining": remaining,
-            "daily_limit": daily_limit
-        }), 429
-
-    # Extract video ID
-    video_id = extract_video_id(url)
-    if not video_id:
-        return jsonify({"error": "Invalid YouTube URL. Pass a valid URL via the 'url' query parameter."}), 400
-
-    try:
-        def do_fetch(ytt_api):
-            transcript_list = ytt_api.list(video_id)
-
-            if translate_to:
-                source_lang = [lang] if lang else ['en']
-                try:
-                    transcript_obj = transcript_list.find_transcript(source_lang)
-                except NoTranscriptFound:
-                    transcript_obj = next(iter(transcript_list))
-                translated = transcript_obj.translate(translate_to)
-                transcript = transcript_to_dicts(translated.fetch())
-                detected_lang = transcript_obj.language_code
-            elif lang:
-                transcript_obj = transcript_list.find_transcript([lang])
-                transcript = transcript_to_dicts(transcript_obj.fetch())
-                detected_lang = lang
-            else:
-                try:
-                    transcript_obj = transcript_list.find_transcript(['en'])
-                except NoTranscriptFound:
-                    transcript_obj = next(iter(transcript_list))
-                transcript = transcript_to_dicts(transcript_obj.fetch())
-                detected_lang = transcript_obj.language_code
-
-            return transcript, detected_lang
-
-        transcript, detected_lang = fetch_with_retry(do_fetch)
-
-        # Save history if user is logged in
-        if '@' in identifier:
-            title = request.args.get("title") or get_video_title(video_id)
-            credit_manager.save_history(identifier, video_id, title)
-
-        return jsonify({
-            "video_id": video_id,
-            "segments": len(transcript),
-            "language": detected_lang,
-            "transcript": transcript,
-            "text": transcript_to_text(transcript),
-            "srt": transcript_to_srt(transcript),
-            "remaining": remaining,
-            "daily_limit": daily_limit,
-        })
-
-    except TranscriptsDisabled:
-        return jsonify({"error": "Transcripts are disabled for this video."}), 404
-    except NoTranscriptFound:
-        return jsonify({"error": f"No transcript found for language '{lang or 'default'}'."}), 404
-    except VideoUnavailable:
-        return jsonify({"error": "This video is unavailable or does not exist."}), 404
-    except StopIteration:
-        return jsonify({"error": "No transcripts are available for this video."}), 404
-    except Exception as e:
-        traceback.print_exc()
-        msg = sanitize_error(str(e))
-        return jsonify({"error": msg}), 500
-
-
-@app.route("/api/v1/docs")
-def api_docs():
-    """Render API documentation page."""
-    return render_template("api_docs.html")
-
-
-# ── Monetization Routes ─────────────────────────────────────────────────────
-
-@app.route("/pricing")
-def pricing():
-    """Render pricing page."""
-    return render_template("pricing.html")
-
-
-@app.route("/api/create-order", methods=["POST"])
-def create_order():
-    """Create a Razorpay order for a subscription plan."""
-    data = request.get_json()
-    plan = data.get("plan", "")
-
-    if plan not in config.PLANS:
-        return jsonify({"error": f"Invalid plan: '{plan}'. Choose from: {', '.join(config.PLANS.keys())}"}), 400
-
-    plan_data = config.PLANS[plan]
-
-    if razorpay_client:
-        try:
-            order = razorpay_client.order.create({
-                'amount': plan_data['price'],
-                'currency': 'INR',
-                'receipt': f"receipt_{plan}",
-            })
-            return jsonify({
-                'order_id': order['id'],
-                'amount': plan_data['price'],
-                'plan_name': plan_data['name'],
-            })
-        except Exception as e:
-            traceback.print_exc()
-            return jsonify({"error": f"Failed to create order: {str(e)}"}), 500
-    else:
-        # Mock order for testing without razorpay SDK
-        return jsonify({
-            'order_id': f'order_mock_{plan}',
-            'amount': plan_data['price'],
-            'plan_name': plan_data['name'],
-        })
-
-
-@app.route("/api/verify-payment", methods=["POST"])
-def verify_payment():
-    """Verify a Razorpay payment and generate an API key."""
-    data = request.get_json()
-    payment_id = data.get("razorpay_payment_id", "")
-    order_id = data.get("razorpay_order_id", "")
-    signature = data.get("razorpay_signature", "")
-
-    print(f"💰 Payment received — order: {order_id}, payment: {payment_id}")
-    
-    if not payment_id or not order_id or not signature:
-        return jsonify({"error": "Missing payment details."}), 400
-
-    if razorpay_client:
-        try:
-            # Verify the payment signature using Razorpay SDK
-            razorpay_client.utility.verify_payment_signature({
-                'razorpay_order_id': order_id,
-                'razorpay_payment_id': payment_id,
-                'razorpay_signature': signature
-            })
-        except razorpay.errors.SignatureVerificationError:
-            print("❌ Payment signature verification failed.")
-            return jsonify({"error": "Invalid payment signature."}), 400
-        except Exception as e:
-            print(f"❌ Payment verification error: {str(e)}")
-            return jsonify({"error": "Failed to verify payment."}), 500
-
-    plan = 'pro'
-    if 'basic' in order_id: plan = 'basic'
-    elif 'unlimited' in order_id: plan = 'unlimited'
-    
-    api_key = credit_manager.generate_api_key(plan)
-    
-    # If the user is logged in (identifier is an email), link the plan to their account
-    identifier = get_user_identifier()
-    if '@' in identifier:
-        credit_manager.set_user_plan(identifier, plan)
-
-    return jsonify({
-        "status": "success",
-        "message": "Payment verified successfully!",
-        "payment_id": payment_id,
-        "order_id": order_id,
-        "api_key": api_key,
-    })
-
-
 @app.route("/api/config", methods=["GET"])
 def get_config():
     """Return public configuration (no secrets!)."""
-    plans_public = {}
-    for key, plan in config.PLANS.items():
-        plans_public[key] = {
-            'name': plan['name'],
-            'price': plan['price'],
-            'price_display': plan['price_display'],
-            'daily_limit': plan.get('daily_credits', 0),
-            'features': plan['features'],
-        }
-
     return jsonify({
-        "razorpay_key_id": config.RAZORPAY_KEY_ID,
         "google_client_id": config.GOOGLE_CLIENT_ID,
-        "plans": plans_public,
         "affiliate_tools": config.AFFILIATE_TOOLS,
     })
 
