@@ -61,8 +61,9 @@ def _save_dict(key, data, fallback):
     if redis_client:
         redis_client.set(key, json.dumps(data))
     else:
-        fallback.clear()
-        fallback.update(data)
+        if data is not fallback:
+            fallback.clear()
+            fallback.update(data)
 
 def _today():
     """Return today's date as ISO string."""
