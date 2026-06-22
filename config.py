@@ -1,7 +1,17 @@
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    try:
+        with open('.env') as f:
+            for line in f:
+                if '=' in line and not line.strip().startswith('#'):
+                    key, val = line.strip().split('=', 1)
+                    os.environ[key] = val
+    except Exception:
+        pass
 
 # Rate Limiting (credits based)
 FREE_DAILY_CREDITS = 5

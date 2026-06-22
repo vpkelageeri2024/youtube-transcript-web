@@ -488,7 +488,7 @@ def create_order():
             order = razorpay_client.order.create({
                 'amount': plan_data['price'],
                 'currency': 'INR',
-                'payment_capture': 1,
+                'receipt': f"receipt_{plan}",
             })
             return jsonify({
                 'order_id': order['id'],
