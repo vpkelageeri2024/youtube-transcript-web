@@ -1,14 +1,17 @@
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Rate Limiting (credits based)
 FREE_DAILY_CREDITS = 5
 
-# Razorpay - Replace with actual keys from https://dashboard.razorpay.com/app/keys
-RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', 'rzp_test_T4MIOkYDvidlt9')
-RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', 'aJou7xPs5KusH5stlwzyFNN3')
+# Razorpay credentials
+RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID')
+RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET')
 
-# Google OAuth - Replace with actual Client ID from Google Cloud Console
-GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com')
+# Google OAuth
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
 
 # Pricing Plans (amounts in paise, 100 paise = Rs.1)
 PLANS = {

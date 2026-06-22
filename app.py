@@ -517,6 +517,24 @@ def verify_payment():
 
     print(f"💰 Payment received — order: {order_id}, payment: {payment_id}")
     
+    if not payment_id or not order_id or not signature:
+        return jsonify({"error": "Missing payment details."}), 400
+
+    if razorpay_client:
+        try:
+            # Verify the payment signature using Razorpay SDK
+            razorpay_client.utility.verify_payment_signature({
+                'razorpay_order_id': order_id,
+                'razorpay_payment_id': payment_id,
+                'razorpay_signature': signature
+            })
+        except razorpay.errors.SignatureVerificationError:
+            print("❌ Payment signature verification failed.")
+            return jsonify({"error": "Invalid payment signature."}), 400
+        except Exception as e:
+            print(f"❌ Payment verification error: {str(e)}")
+            return jsonify({"error": "Failed to verify payment."}), 500
+
     plan = 'pro'
     if 'basic' in order_id: plan = 'basic'
     elif 'unlimited' in order_id: plan = 'unlimited'
