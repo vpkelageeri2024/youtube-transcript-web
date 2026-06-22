@@ -12,17 +12,27 @@ import json
 import config
 
 try:
+    from upstash_redis import Redis as UpstashRedis
+except ImportError:
+    UpstashRedis = None
+
+try:
     import redis
 except ImportError:
     redis = None
 
 redis_client = None
-if getattr(config, 'REDIS_URL', None) and redis:
+
+if getattr(config, 'UPSTASH_REST_URL', None) and getattr(config, 'UPSTASH_REST_TOKEN', None) and UpstashRedis:
+    try:
+        redis_client = UpstashRedis(url=config.UPSTASH_REST_URL, token=config.UPSTASH_REST_TOKEN)
+    except Exception as e:
+        print(f"Failed to initialize Upstash Redis: {e}")
+elif getattr(config, 'REDIS_URL', None) and redis:
     try:
         redis_client = redis.from_url(config.REDIS_URL)
     except Exception as e:
-        print(f"Failed to initialize Redis: {e}")
-        redis_client = None
+        print(f"Failed to initialize standard Redis: {e}")
 
 # ── Plan Definitions ─────────────────────────────────────────────────────────
 
