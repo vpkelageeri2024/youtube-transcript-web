@@ -2,6 +2,7 @@
 
 let currentTranscript = null;
 let currentVideoId = null;
+let googleClientId = null;
 
 // ── DOM Elements ─────────────────────────────────────────────────────────
 
@@ -499,9 +500,103 @@ async function loadAffiliateTools() {
     }
 }
 
+// ── Google Auth ──────────────────────────────────────────────────────────
+
+async function initAuth() {
+    try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+            const config = await res.json();
+            googleClientId = config.google_client_id;
+        }
+    } catch (e) {}
+
+    fetchMe();
+}
+
+async function fetchMe() {
+    try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.user) {
+                renderUser(data.user);
+            } else {
+                renderGoogleButton();
+            }
+        }
+    } catch (err) {}
+}
+
+function renderGoogleButton() {
+    const authContainer = document.getElementById('userAuth');
+    if (!authContainer) return;
+    
+    // We must wait for `google` to be available
+    if (typeof google === 'undefined' || !googleClientId) {
+        setTimeout(renderGoogleButton, 500);
+        return;
+    }
+    
+    authContainer.innerHTML = '<div id="googleButtonDiv"></div>';
+    
+    google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleCredentialResponse
+    });
+    
+    google.accounts.id.renderButton(
+        document.getElementById("googleButtonDiv"),
+        { theme: "outline", size: "large", shape: "pill" }
+    );
+}
+
+async function handleCredentialResponse(response) {
+    try {
+        const res = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: response.credential })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            renderUser(data.user);
+            fetchCredits(); 
+            showToast("Successfully logged in!");
+        } else {
+            showStatus("Login failed.", "error");
+        }
+    } catch (e) {
+        showStatus("Network error during login.", "error");
+    }
+}
+
+function renderUser(user) {
+    const authContainer = document.getElementById('userAuth');
+    if (!authContainer) return;
+    
+    authContainer.innerHTML = `
+        <div class="user-profile">
+            <img src="${user.picture}" alt="Profile" class="user-profile__img" referrerpolicy="no-referrer">
+            <span class="user-profile__name">${escapeHtml(user.name)}</span>
+            <button onclick="logout()" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 999px;">Logout</button>
+        </div>
+    `;
+}
+
+async function logout() {
+    try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        renderGoogleButton();
+        fetchCredits(); 
+        showToast("Logged out");
+    } catch (e) {}
+}
+
 // ── Init ─────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
     // Fetch credit balance on page load
     fetchCredits();
+    initAuth();
 });

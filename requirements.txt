@@ -3,3 +3,4 @@ youtube-transcript-api==1.2.4
 razorpay==2.0.1
 gunicorn==22.0.0
 requests
+google-auth==2.36.0

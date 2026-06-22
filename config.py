@@ -7,6 +7,9 @@ FREE_DAILY_CREDITS = 5
 RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', 'rzp_test_T4MIOkYDvidlt9')
 RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET', 'aJou7xPs5KusH5stlwzyFNN3')
 
+# Google OAuth - Replace with actual Client ID from Google Cloud Console
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com')
+
 # Pricing Plans (amounts in paise, 100 paise = Rs.1)
 PLANS = {
     'basic': {

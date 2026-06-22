@@ -18,7 +18,9 @@ import traceback
 from datetime import date
 from urllib.parse import urlparse, parse_qs
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, session
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
@@ -42,6 +44,7 @@ except ImportError:
 # ── App ──────────────────────────────────────────────────────────────────────
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'default-secret-key-change-in-prod')
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -192,6 +195,50 @@ def fetch_with_retry(fetch_func, max_retries=MAX_RETRIES):
     raise last_error
 
 
+def get_user_identifier():
+    """Get email if logged in, otherwise IP address."""
+    user = session.get('user')
+    if user and 'email' in user:
+        return user['email']
+    return request.remote_addr
+
+
+# ── Auth Routes ──────────────────────────────────────────────────────────────
+
+@app.route("/api/auth/google", methods=["POST"])
+def auth_google():
+    """Verify Google ID token and set session."""
+    data = request.get_json()
+    token = data.get("credential")
+    if not token:
+        return jsonify({"error": "No token provided"}), 400
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            token, google_requests.Request(), config.GOOGLE_CLIENT_ID)
+        session['user'] = {
+            'email': idinfo['email'],
+            'name': idinfo.get('name', ''),
+            'picture': idinfo.get('picture', '')
+        }
+        return jsonify({"status": "success", "user": session['user']})
+    except ValueError:
+        return jsonify({"error": "Invalid token"}), 401
+    except Exception as e:
+        print(f"Google auth error: {e}")
+        return jsonify({"error": "Authentication failed"}), 500
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    """Clear user session."""
+    session.pop('user', None)
+    return jsonify({"status": "success"})
+
+@app.route("/api/auth/me", methods=["GET"])
+def auth_me():
+    """Get current logged in user."""
+    return jsonify({"user": session.get('user')})
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -201,18 +248,18 @@ def index():
 
 @app.route("/api/credits", methods=["GET"])
 def get_credits():
-    """Return the current credit balance for the user's IP."""
-    ip = request.remote_addr
-    return jsonify(credit_manager.get_credits(ip))
+    """Return the current credit balance for the user's IP or email."""
+    identifier = get_user_identifier()
+    return jsonify(credit_manager.get_credits(identifier))
 
 
 @app.route("/api/transcript", methods=["POST"])
 def get_transcript():
     """Fetch transcript for a YouTube video (with credit deduction)."""
-    ip = request.remote_addr
+    identifier = get_user_identifier()
 
     # Check credits
-    has_credits, remaining, daily_limit = credit_manager.use_credit(ip)
+    has_credits, remaining, daily_limit = credit_manager.use_credit(identifier)
     if not has_credits:
         return jsonify({
             "error": "Out of credits. Upgrade your plan for more!",
@@ -340,8 +387,8 @@ def api_transcript():
             return jsonify({"error": "Invalid API Key."}), 401
         has_credits, remaining, daily_limit = credit_manager.use_credit(api_key, plan)
     else:
-        ip = request.remote_addr
-        has_credits, remaining, daily_limit = credit_manager.use_credit(ip)
+        identifier = get_user_identifier()
+        has_credits, remaining, daily_limit = credit_manager.use_credit(identifier)
 
     if not has_credits:
         return jsonify({
@@ -499,6 +546,7 @@ def get_config():
 
     return jsonify({
         "razorpay_key_id": config.RAZORPAY_KEY_ID,
+        "google_client_id": config.GOOGLE_CLIENT_ID,
         "plans": plans_public,
         "affiliate_tools": config.AFFILIATE_TOOLS,
     })

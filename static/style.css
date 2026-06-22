@@ -1202,3 +1202,36 @@ body {
     color: var(--accent-purple-light);
     background: rgba(139, 92, 246, 0.1);
 }
+
+/* ── Auth UI ───────────────────────────────────────────────────────────── */
+
+.user-auth-container {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 40px;
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-card);
+    padding: 6px 12px 6px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+}
+
+.user-profile__img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.user-profile__name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
