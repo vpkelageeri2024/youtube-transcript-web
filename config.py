@@ -27,7 +27,7 @@ _google_id = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_ID = _google_id.strip(' \'"') if _google_id else None
 
 # Redis Config
-REDIS_URL = os.environ.get('REDIS_URL', None)
+REDIS_URL = os.environ.get('KV_URL') or os.environ.get('UPSTASH_REDIS_URL') or os.environ.get('REDIS_URL')
 
 # Pricing Plans (amounts in paise, 100 paise = Rs.1)
 PLANS = {
