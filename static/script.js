@@ -17,6 +17,7 @@ const resultsEl = document.getElementById('results');
 const langsPanelEl = document.getElementById('langsPanel');
 const videoPreview = document.getElementById('videoPreview');
 const toastEl = document.getElementById('toast');
+const searchInput = document.getElementById('searchInput');
 
 // ── Video Preview ────────────────────────────────────────────────────────
 
@@ -106,6 +107,15 @@ function formatTime(seconds) {
         return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatTimeVtt(seconds) {
+    const total = Math.floor(seconds);
+    const ms = Math.floor((seconds - total) * 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
 }
 
 // ── Usage Badge ──────────────────────────────────────────────────────────
@@ -215,6 +225,23 @@ function renderTranscript(data) {
     // SRT view
     document.getElementById('srtView').textContent = data.srt;
 
+    // VTT view
+    let vttContent = "WEBVTT\n\n";
+    vttContent += data.transcript.map(entry => {
+        const start = formatTimeVtt(entry.start);
+        const end = formatTimeVtt(entry.start + entry.duration);
+        return `${start} --> ${end}\n${entry.text}\n`;
+    }).join('\n');
+    document.getElementById('vttView').textContent = vttContent;
+    currentTranscript.vtt = vttContent;
+
+    // MD view
+    const mdContent = `# Transcript for ${data.video_id}\n\n` + data.transcript.map(entry => {
+        return `**[${formatTime(entry.start)}]** ${entry.text}`;
+    }).join('\n\n');
+    document.getElementById('mdView').textContent = mdContent;
+    currentTranscript.md = mdContent;
+
     // JSON view
     document.getElementById('jsonView').textContent = JSON.stringify(data.transcript, null, 2);
 
@@ -258,6 +285,43 @@ function switchTab(tab) {
 document.querySelectorAll('.view-tab').forEach(tab => {
     tab.addEventListener('click', () => switchTab(tab.dataset.tab));
 });
+
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        
+        // Highlight in timestamped view
+        const segments = document.querySelectorAll('.segment');
+        segments.forEach(seg => {
+            const textEl = seg.querySelector('.segment__text');
+            const originalText = textEl.dataset.original || textEl.textContent;
+            if (!textEl.dataset.original) {
+                textEl.dataset.original = originalText;
+            }
+            
+            if (query) {
+                const safeQuery = escapeRegExp(query);
+                const regex = new RegExp(`(${safeQuery})`, 'gi');
+                const highlighted = escapeHtml(originalText).replace(regex, '<mark>$1</mark>');
+                textEl.innerHTML = highlighted;
+                
+                // hide/show segment based on match
+                if (originalText.toLowerCase().includes(query)) {
+                    seg.style.display = '';
+                } else {
+                    seg.style.display = 'none';
+                }
+            } else {
+                textEl.innerHTML = escapeHtml(originalText);
+                seg.style.display = '';
+            }
+        });
+    });
+}
 
 // ── Fetch Transcript ─────────────────────────────────────────────────────
 
@@ -411,6 +475,8 @@ function getActiveContent() {
 
     if (tab === 'text') return currentTranscript?.text || '';
     if (tab === 'srt') return currentTranscript?.srt || '';
+    if (tab === 'vtt') return currentTranscript?.vtt || '';
+    if (tab === 'md') return currentTranscript?.md || '';
     if (tab === 'json') return JSON.stringify(currentTranscript?.transcript, null, 2);
 
     return '';
@@ -439,7 +505,7 @@ function downloadTranscript() {
 
     const activeView = document.querySelector('.transcript-view--active');
     const tab = activeView?.dataset.view || 'text';
-    const extMap = { timestamped: 'txt', text: 'txt', srt: 'srt', json: 'json' };
+    const extMap = { timestamped: 'txt', text: 'txt', srt: 'srt', vtt: 'vtt', md: 'md', json: 'json' };
     const ext = extMap[tab] || 'txt';
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -579,6 +645,7 @@ function renderUser(user) {
         <div class="user-profile">
             <img src="${user.picture}" alt="Profile" class="user-profile__img" referrerpolicy="no-referrer">
             <span class="user-profile__name">${escapeHtml(user.name)}</span>
+            <button onclick="showHistory()" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 999px;">History</button>
             <button onclick="logout()" class="btn btn--secondary" style="padding: 4px 10px; font-size: 0.8rem; border-radius: 999px;">Logout</button>
         </div>
     `;
@@ -591,6 +658,66 @@ async function logout() {
         fetchCredits(); 
         showToast("Logged out");
     } catch (e) {}
+}
+
+// ── History Modal ────────────────────────────────────────────────────────
+
+async function showHistory() {
+    const existing = document.querySelector('.modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+        <div class="modal" style="max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+            <div class="modal__icon">🕒</div>
+            <h2 class="modal__title">Your History</h2>
+            <div id="historyList" style="text-align: left; margin: 15px 0;">Loading...</div>
+            <button class="btn btn--secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+        </div>
+    `;
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+
+    document.body.appendChild(overlay);
+
+    try {
+        const res = await fetch('/api/auth/history');
+        const data = await res.json();
+        
+        const listEl = document.getElementById('historyList');
+        if (!res.ok) {
+            listEl.innerHTML = \`<p style="color: var(--danger)">Error: \${escapeHtml(data.error || 'Could not fetch history')}</p>\`;
+            return;
+        }
+
+        if (!data.history || data.history.length === 0) {
+            listEl.innerHTML = '<p>No history found.</p>';
+            return;
+        }
+
+        listEl.innerHTML = data.history.map(item => \`
+            <div style="background: var(--bg-card); padding: 10px; margin-bottom: 10px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border);" onclick="loadHistoryItem('\${item.video_id}', '\${item.language || ''}')">
+                <div style="font-weight: 500; margin-bottom: 4px;">Video ID: \${item.video_id}</div>
+                <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                    <span>Language: \${item.language || 'Default'}</span>
+                    <span>\${new Date(item.created_at).toLocaleString()}</span>
+                </div>
+            </div>
+        \`).join('');
+
+    } catch (err) {
+        document.getElementById('historyList').innerHTML = '<p style="color: var(--danger)">Network error.</p>';
+    }
+}
+
+function loadHistoryItem(videoId, lang) {
+    document.querySelector('.modal-overlay')?.remove();
+    urlInput.value = \`https://www.youtube.com/watch?v=\${videoId}\`;
+    langInput.value = lang || '';
+    fetchTranscript();
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────

@@ -26,6 +26,9 @@ RAZORPAY_KEY_SECRET = _rzp_secret.strip(' \'"') if _rzp_secret else None
 _google_id = os.environ.get('GOOGLE_CLIENT_ID', '')
 GOOGLE_CLIENT_ID = _google_id.strip(' \'"') if _google_id else None
 
+# Redis Config
+REDIS_URL = os.environ.get('REDIS_URL', None)
+
 # Pricing Plans (amounts in paise, 100 paise = Rs.1)
 PLANS = {
     'basic': {

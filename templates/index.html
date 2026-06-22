@@ -98,6 +98,8 @@
                         <option value="timestamped">Timestamped</option>
                         <option value="text">Plain Text</option>
                         <option value="srt">SRT Subtitles</option>
+                        <option value="vtt">VTT Subtitles</option>
+                        <option value="md">Markdown</option>
                         <option value="json">JSON</option>
                     </select>
                 </div>
@@ -149,11 +151,18 @@
                 </div>
             </div>
 
+            <!-- Search -->
+            <div class="transcript-search" style="margin-bottom: 16px;">
+                <input type="text" id="searchInput" placeholder="Search transcript..." class="option-field__input" style="width: 100%;">
+            </div>
+
             <!-- View Tabs -->
             <div class="view-tabs">
                 <button class="view-tab view-tab--active" data-tab="timestamped">Timestamped</button>
                 <button class="view-tab" data-tab="text">Text</button>
                 <button class="view-tab" data-tab="srt">SRT</button>
+                <button class="view-tab" data-tab="vtt">VTT</button>
+                <button class="view-tab" data-tab="md">Markdown</button>
                 <button class="view-tab" data-tab="json">JSON</button>
             </div>
 
@@ -167,6 +176,12 @@
                 </div>
                 <div class="transcript-view" data-view="srt">
                     <pre class="transcript-raw" id="srtView"></pre>
+                </div>
+                <div class="transcript-view" data-view="vtt">
+                    <pre class="transcript-raw" id="vttView"></pre>
+                </div>
+                <div class="transcript-view" data-view="md">
+                    <pre class="transcript-raw" id="mdView"></pre>
                 </div>
                 <div class="transcript-view" data-view="json">
                     <pre class="transcript-raw" id="jsonView"></pre>

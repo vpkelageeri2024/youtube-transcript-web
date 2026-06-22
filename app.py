@@ -18,6 +18,7 @@ import time
 import traceback
 from datetime import date
 from urllib.parse import urlparse, parse_qs
+import requests
 
 from flask import Flask, render_template, request, jsonify, session
 from google.oauth2 import id_token
@@ -83,6 +84,16 @@ def extract_video_id(url):
 
     return None
 
+def get_video_title(video_id):
+    try:
+        res = requests.get(f"https://www.youtube.com/watch?v={video_id}", timeout=5)
+        if res.status_code == 200:
+            match = re.search(r'<title>(.*?)</title>', res.text)
+            if match:
+                return match.group(1).replace(" - YouTube", "")
+    except Exception:
+        pass
+    return f"Video {video_id}"
 
 def format_srt_timestamp(seconds):
     """Converts seconds to SRT format: HH:MM:SS,mmm"""
@@ -239,6 +250,14 @@ def auth_me():
     """Get current logged in user."""
     return jsonify({"user": session.get('user')})
 
+@app.route("/api/auth/history", methods=["GET"])
+def auth_history():
+    """Get user history."""
+    user = session.get('user')
+    if not user or 'email' not in user:
+        return jsonify({"error": "Unauthorized"}), 401
+    history = credit_manager.get_history(user['email'])
+    return jsonify({"history": history})
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
@@ -307,6 +326,11 @@ def get_transcript():
             return transcript, detected_lang
 
         transcript, detected_lang = fetch_with_retry(do_fetch)
+
+        # Save history if user is logged in
+        if '@' in identifier:
+            title = data.get("title") or get_video_title(video_id)
+            credit_manager.save_history(identifier, video_id, title)
 
         return jsonify({
             "video_id": video_id,
@@ -432,6 +456,11 @@ def api_transcript():
             return transcript, detected_lang
 
         transcript, detected_lang = fetch_with_retry(do_fetch)
+
+        # Save history if user is logged in
+        if '@' in identifier:
+            title = request.args.get("title") or get_video_title(video_id)
+            credit_manager.save_history(identifier, video_id, title)
 
         return jsonify({
             "video_id": video_id,
