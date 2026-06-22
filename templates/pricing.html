@@ -166,7 +166,7 @@
 
         <!-- Free Tier Callout -->
         <div class="free-tier-notice">
-            ✨ <strong>Start for free:</strong> Get 3 transcripts per day, completely free. No credit card required.
+            ✨ <strong>Start for free:</strong> Get 5 credits per day. Each transcript costs 1 credit.
         </div>
 
         <!-- Pricing Grid -->
@@ -271,8 +271,7 @@
                             });
                             const result = await verify.json();
                             if (result.status === 'success') {
-                                alert('Payment successful! Your plan is now active.');
-                                window.location.href = '/';
+                                showApiKeyModal(result.api_key);
                             } else {
                                 alert('Payment verification failed.');
                             }
@@ -302,6 +301,48 @@
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
+        }
+
+        function showApiKeyModal(apiKey) {
+            // Remove existing modal if any
+            const existing = document.querySelector('.modal-overlay');
+            if (existing) existing.remove();
+
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.innerHTML = `
+                <div class="modal" style="max-width: 520px;">
+                    <div class="modal__icon">🎉</div>
+                    <h2 class="modal__title">Payment Successful!</h2>
+                    <p class="modal__text">Your plan is now active. Here is your API key — save it somewhere safe, you won't be able to see it again.</p>
+                    <div style="
+                        background: rgba(139, 92, 246, 0.1);
+                        border: 1px solid rgba(139, 92, 246, 0.25);
+                        border-radius: 12px;
+                        padding: 16px;
+                        margin-bottom: 24px;
+                        word-break: break-all;
+                        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+                        font-size: 0.9rem;
+                        color: var(--accent-purple-light, #a78bfa);
+                        text-align: center;
+                        cursor: pointer;
+                        position: relative;
+                    " onclick="navigator.clipboard.writeText('${apiKey}'); this.querySelector('.copy-hint').textContent = '✓ Copied!'" title="Click to copy">
+                        ${apiKey}
+                        <div class="copy-hint" style="font-size: 0.7rem; color: var(--text-muted, #55556a); margin-top: 6px; font-family: 'Inter', sans-serif;">Click to copy</div>
+                    </div>
+                    <a href="/" class="modal__btn-primary" style="display: inline-block; text-decoration: none;">🚀 Start Using</a>
+                </div>
+            `;
+
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    window.location.href = '/';
+                }
+            });
+
+            document.body.appendChild(overlay);
         }
     </script>
 </body>

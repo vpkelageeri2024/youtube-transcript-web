@@ -244,7 +244,7 @@
                     <tbody>
                         <tr>
                             <td><span class="param-name">X-API-Key</span></td>
-                            <td>Your API key. If omitted, the request will fall under the IP-based free tier limit (3/day).</td>
+                            <td>Your API key (generated after payment). If omitted, falls under free tier (5 credits/day).</td>
                         </tr>
                     </tbody>
                 </table>
@@ -301,10 +301,10 @@ fetch(url, {
                 <h2 class="docs-section__title"><span>⏱</span> Rate Limits</h2>
                 <p class="docs-text">To prevent abuse, the API enforces rate limits based on your plan:</p>
                 <ul class="docs-text" style="padding-left: 20px;">
-                    <li><strong>No API Key (Free):</strong> 3 requests per day per IP.</li>
-                    <li><strong>Basic Plan:</strong> 50 requests per day.</li>
-                    <li><strong>Pro Plan:</strong> 500 requests per day.</li>
-                    <li><strong>Unlimited Plan:</strong> Unlimited requests.</li>
+                    <li><strong>Free:</strong> 5 credits/day</li>
+                    <li><strong>Basic:</strong> 50 credits/day</li>
+                    <li><strong>Pro:</strong> 500 credits/day + API key</li>
+                    <li><strong>Unlimited:</strong> Unlimited + API key</li>
                 </ul>
                 <p class="docs-text">If you exceed your limit, the API will return a <code>429 Too Many Requests</code> status code.</p>
             </section>

@@ -126,6 +126,42 @@ function updateUsageBadge(remaining, total) {
     }
 }
 
+// ── Credit Badge ─────────────────────────────────────────────────────────
+
+function updateCreditBadge(credits, dailyLimit) {
+    const badge = document.getElementById('creditBadge');
+    const count = document.getElementById('creditCount');
+    if (!badge || !count) return;
+    
+    count.textContent = dailyLimit < 0 ? '∞' : credits;
+    badge.classList.remove('credit-badge--ok', 'credit-badge--warning', 'credit-badge--danger');
+    
+    if (dailyLimit < 0) {
+        badge.classList.add('credit-badge--ok');
+    } else if (credits > 3) {
+        badge.classList.add('credit-badge--ok');
+    } else if (credits > 0) {
+        badge.classList.add('credit-badge--warning');
+    } else {
+        badge.classList.add('credit-badge--danger');
+    }
+    
+    badge.classList.add('credit-badge--pulse');
+    setTimeout(() => badge.classList.remove('credit-badge--pulse'), 300);
+}
+
+async function fetchCredits() {
+    try {
+        const res = await fetch('/api/credits');
+        if (res.ok) {
+            const data = await res.json();
+            updateCreditBadge(data.credits, data.daily_limit);
+        }
+    } catch (err) {
+        // Silently fail — credit badge is non-critical
+    }
+}
+
 // ── Upgrade Modal ────────────────────────────────────────────────────────
 
 function showUpgradeModal() {
@@ -137,10 +173,10 @@ function showUpgradeModal() {
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `
         <div class="modal">
-            <div class="modal__icon">🔒</div>
-            <h2 class="modal__title">Daily Limit Reached</h2>
-            <p class="modal__text">You've used all your free transcripts for today. Upgrade to get more transcripts and unlock premium features.</p>
-            <a href="/pricing" class="modal__btn-primary">💎 Upgrade Now</a>
+            <div class="modal__icon">🪙</div>
+            <h2 class="modal__title">Out of Credits</h2>
+            <p class="modal__text">You've used all your credits for today. Each transcript costs 1 credit. Upgrade your plan to get more daily credits and unlock premium features.</p>
+            <a href="/pricing" class="modal__btn-primary">💎 Get More Credits</a>
             <button class="modal__btn-dismiss" onclick="this.closest('.modal-overlay').remove()">Maybe Later</button>
         </div>
     `;
@@ -253,12 +289,22 @@ async function fetchTranscript() {
         const data = await res.json();
 
         if (!res.ok) {
-            showStatus(data.error || 'Something went wrong.', 'error');
+            if (res.status === 429) {
+                showStatus(data.error || 'Out of credits.', 'error');
+                showUpgradeModal();
+            } else {
+                showStatus(data.error || 'Something went wrong.', 'error');
+            }
             return;
         }
 
         showStatus(`Fetched ${data.segments} segments for video ${data.video_id}`, 'success');
         renderTranscript(data);
+
+        // Update credit badge from response
+        if (data.remaining !== undefined && data.daily_limit !== undefined) {
+            updateCreditBadge(data.remaining, data.daily_limit);
+        }
 
     } catch (err) {
         showStatus(`Network error: ${err.message}`, 'error');
@@ -456,5 +502,6 @@ async function loadAffiliateTools() {
 // ── Init ─────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Other initializations can go here
+    // Fetch credit balance on page load
+    fetchCredits();
 });

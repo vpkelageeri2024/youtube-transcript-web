@@ -1133,3 +1133,72 @@ body {
 .nav-link:hover {
     color: var(--accent-purple-light);
 }
+
+/* ── Credit Badge ──────────────────────────────────────────────────────── */
+.credit-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent-purple-light);
+    transition: all 0.3s ease;
+    cursor: default;
+    margin-top: 12px;
+}
+
+.credit-badge--ok {
+    background: rgba(52, 211, 153, 0.12);
+    border-color: rgba(52, 211, 153, 0.25);
+    color: var(--accent-green);
+}
+
+.credit-badge--warning {
+    background: rgba(251, 191, 36, 0.12);
+    border-color: rgba(251, 191, 36, 0.25);
+    color: #fbbf24;
+}
+
+.credit-badge--danger {
+    background: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.25);
+    color: #ef4444;
+}
+
+.credit-badge__icon { font-size: 1rem; }
+.credit-badge__count { font-variant-numeric: tabular-nums; }
+.credit-badge__label { color: var(--text-muted); font-weight: 500; }
+
+@keyframes creditPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.credit-badge--pulse { animation: creditPulse 0.3s ease; }
+
+.header__nav {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    justify-content: center;
+}
+
+.header__nav-link {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 4px 12px;
+    border-radius: 999px;
+    transition: all 0.2s ease;
+}
+
+.header__nav-link:hover {
+    color: var(--accent-purple-light);
+    background: rgba(139, 92, 246, 0.1);
+}

@@ -29,6 +29,7 @@ from youtube_transcript_api._errors import (
 
 import config
 from proxy_manager import proxy_manager, MAX_RETRIES
+import credit_manager
 
 # ── Razorpay Setup ───────────────────────────────────────────────────────────
 
@@ -198,9 +199,28 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/api/credits", methods=["GET"])
+def get_credits():
+    """Return the current credit balance for the user's IP."""
+    ip = request.remote_addr
+    return jsonify(credit_manager.get_credits(ip))
+
+
 @app.route("/api/transcript", methods=["POST"])
 def get_transcript():
-    """Fetch transcript for a YouTube video (free, unlimited, with proxy rotation)."""
+    """Fetch transcript for a YouTube video (with credit deduction)."""
+    ip = request.remote_addr
+
+    # Check credits
+    has_credits, remaining, daily_limit = credit_manager.use_credit(ip)
+    if not has_credits:
+        return jsonify({
+            "error": "Out of credits. Upgrade your plan for more!",
+            "limit_reached": True,
+            "remaining": remaining,
+            "daily_limit": daily_limit,
+        }), 429
+
     data = request.get_json()
     url = data.get("url", "")
     lang = data.get("lang", "")
@@ -247,6 +267,8 @@ def get_transcript():
             "transcript": transcript,
             "text": transcript_to_text(transcript),
             "srt": transcript_to_srt(transcript),
+            "remaining": remaining,
+            "daily_limit": daily_limit,
         })
 
     except TranscriptsDisabled:
@@ -304,10 +326,30 @@ def get_languages():
 
 @app.route("/api/v1/transcript", methods=["GET"])
 def api_transcript():
-    """Public API endpoint for fetching transcripts (free, unlimited)."""
+    """Public API endpoint for fetching transcripts (with credit checking)."""
     url = request.args.get("url", "")
     lang = request.args.get("lang", "")
     translate_to = request.args.get("translate", "")
+
+    # Check API key
+    api_key = request.headers.get("X-API-Key", "")
+    
+    if api_key:
+        plan = credit_manager.get_plan_for_api_key(api_key)
+        if not plan:
+            return jsonify({"error": "Invalid API Key."}), 401
+        has_credits, remaining, daily_limit = credit_manager.use_credit(api_key, plan)
+    else:
+        ip = request.remote_addr
+        has_credits, remaining, daily_limit = credit_manager.use_credit(ip)
+
+    if not has_credits:
+        return jsonify({
+            "error": "Out of credits.",
+            "limit_reached": True,
+            "remaining": remaining,
+            "daily_limit": daily_limit
+        }), 429
 
     # Extract video ID
     video_id = extract_video_id(url)
@@ -350,6 +392,8 @@ def api_transcript():
             "transcript": transcript,
             "text": transcript_to_text(transcript),
             "srt": transcript_to_srt(transcript),
+            "remaining": remaining,
+            "daily_limit": daily_limit,
         })
 
     except TranscriptsDisabled:
@@ -417,19 +461,26 @@ def create_order():
 
 @app.route("/api/verify-payment", methods=["POST"])
 def verify_payment():
-    """Verify a Razorpay payment (log and confirm for now)."""
+    """Verify a Razorpay payment and generate an API key."""
     data = request.get_json()
     payment_id = data.get("razorpay_payment_id", "")
     order_id = data.get("razorpay_order_id", "")
     signature = data.get("razorpay_signature", "")
 
     print(f"💰 Payment received — order: {order_id}, payment: {payment_id}")
+    
+    plan = 'pro'
+    if 'basic' in order_id: plan = 'basic'
+    elif 'unlimited' in order_id: plan = 'unlimited'
+    
+    api_key = credit_manager.generate_api_key(plan)
 
     return jsonify({
         "status": "success",
         "message": "Payment verified successfully!",
         "payment_id": payment_id,
         "order_id": order_id,
+        "api_key": api_key,
     })
 
 
@@ -442,7 +493,7 @@ def get_config():
             'name': plan['name'],
             'price': plan['price'],
             'price_display': plan['price_display'],
-            'daily_limit': plan['daily_limit'],
+            'daily_limit': plan.get('daily_credits', 0),
             'features': plan['features'],
         }
 
@@ -469,7 +520,7 @@ def proxy_status():
 # ── Run ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("\n🎬 YouTube Transcript Generator (Unlimited & Free)")
+    print("\n🎬 YouTube Transcript Generator (Credit Based)")
     print("   Open http://localhost:5000 in your browser")
     print(f"   Proxy pool: {proxy_manager.pool_size} proxies available\n")
     app.run(debug=True, host="0.0.0.0", port=5000)

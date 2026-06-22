@@ -1,8 +1,7 @@
 import os
 
-# Rate Limiting (disabled — app is now free & unlimited)
-# Kept for reference; the proxy_manager handles YouTube IP rotation instead.
-FREE_DAILY_LIMIT = 0  # Unused
+# Rate Limiting (credits based)
+FREE_DAILY_CREDITS = 5
 
 # Razorpay - Replace with actual keys from https://dashboard.razorpay.com/app/keys
 RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID', 'rzp_test_T4MIOkYDvidlt9')
@@ -14,22 +13,22 @@ PLANS = {
         'name': 'Basic',
         'price': 9900,
         'price_display': 'Rs.99/month',
-        'daily_limit': 50,
-        'features': ['50 transcripts/day', 'All languages', 'SRT & JSON export', 'Email support'],
+        'daily_credits': 50,
+        'features': ['50 credits/day', 'All languages', 'SRT & JSON export', 'Email support'],
     },
     'pro': {
         'name': 'Pro',
         'price': 29900,
         'price_display': 'Rs.299/month',
-        'daily_limit': 500,
-        'features': ['500 transcripts/day', 'All languages', 'All export formats', 'API access', 'Priority support'],
+        'daily_credits': 500,
+        'features': ['500 credits/day', 'All languages', 'All export formats', 'API access', 'Priority support'],
     },
     'unlimited': {
         'name': 'Unlimited',
         'price': 59900,
         'price_display': 'Rs.599/month',
-        'daily_limit': -1,
-        'features': ['Unlimited transcripts', 'All languages', 'All export formats', 'Full API access', 'Bulk processing', 'Priority support'],
+        'daily_credits': -1,
+        'features': ['Unlimited credits', 'All languages', 'All export formats', 'Full API access', 'Bulk processing', 'Priority support'],
     },
 }
 
