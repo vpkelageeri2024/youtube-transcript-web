@@ -18,7 +18,11 @@ except ImportError:
 
 redis_client = None
 if getattr(config, 'REDIS_URL', None) and redis:
-    redis_client = redis.from_url(config.REDIS_URL)
+    try:
+        redis_client = redis.from_url(config.REDIS_URL)
+    except Exception as e:
+        print(f"Failed to initialize Redis: {e}")
+        redis_client = None
 
 # ── Plan Definitions ─────────────────────────────────────────────────────────
 
