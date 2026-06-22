@@ -17,11 +17,14 @@ except ImportError:
 FREE_DAILY_CREDITS = 5
 
 # Razorpay credentials
-RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID')
-RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET')
+_rzp_id = os.environ.get('RAZORPAY_KEY_ID', '')
+_rzp_secret = os.environ.get('RAZORPAY_KEY_SECRET', '')
+RAZORPAY_KEY_ID = _rzp_id.strip(' \'"') if _rzp_id else None
+RAZORPAY_KEY_SECRET = _rzp_secret.strip(' \'"') if _rzp_secret else None
 
 # Google OAuth
-GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
+_google_id = os.environ.get('GOOGLE_CLIENT_ID', '')
+GOOGLE_CLIENT_ID = _google_id.strip(' \'"') if _google_id else None
 
 # Pricing Plans (amounts in paise, 100 paise = Rs.1)
 PLANS = {
