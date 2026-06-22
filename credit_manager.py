@@ -11,28 +11,6 @@ from datetime import date
 import json
 import config
 
-try:
-    from upstash_redis import Redis as UpstashRedis
-except ImportError:
-    UpstashRedis = None
-
-try:
-    import redis
-except ImportError:
-    redis = None
-
-redis_client = None
-
-if getattr(config, 'UPSTASH_REST_URL', None) and getattr(config, 'UPSTASH_REST_TOKEN', None) and UpstashRedis:
-    try:
-        redis_client = UpstashRedis(url=config.UPSTASH_REST_URL, token=config.UPSTASH_REST_TOKEN)
-    except Exception as e:
-        print(f"Failed to initialize Upstash Redis: {e}")
-elif getattr(config, 'REDIS_URL', None) and redis:
-    try:
-        redis_client = redis.from_url(config.REDIS_URL)
-    except Exception as e:
-        print(f"Failed to initialize standard Redis: {e}")
 
 # ── Plan Definitions ─────────────────────────────────────────────────────────
 
@@ -64,20 +42,12 @@ _lock = threading.Lock()
 # ── Internal Helpers ─────────────────────────────────────────────────────────
 
 def _load_dict(key, fallback):
-    if redis_client:
-        val = redis_client.get(key)
-        if val:
-            return json.loads(val)
-        return {}
     return fallback
 
 def _save_dict(key, data, fallback):
-    if redis_client:
-        redis_client.set(key, json.dumps(data))
-    else:
-        if data is not fallback:
-            fallback.clear()
-            fallback.update(data)
+    if data is not fallback:
+        fallback.clear()
+        fallback.update(data)
 
 def _today():
     """Return today's date as ISO string."""
