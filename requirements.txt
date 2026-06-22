@@ -6,3 +6,4 @@ requests
 google-auth==2.36.0
 python-dotenv==1.0.1
 redis
+upstash-redis
