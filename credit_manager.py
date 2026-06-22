@@ -11,6 +11,33 @@ from datetime import date
 import json
 import config
 
+try:
+    from upstash_redis import Redis as UpstashRedis
+except ImportError:
+    UpstashRedis = None
+
+try:
+    import redis
+except ImportError:
+    redis = None
+
+redis_client = None
+
+if getattr(config, 'UPSTASH_REST_URL', None) and getattr(config, 'UPSTASH_REST_TOKEN', None) and UpstashRedis:
+    try:
+        redis_client = UpstashRedis(url=config.UPSTASH_REST_URL, token=config.UPSTASH_REST_TOKEN)
+        redis_client.get("test_connection")
+    except Exception as e:
+        print(f"Failed to connect to Upstash Redis: {e}")
+        redis_client = None
+elif getattr(config, 'REDIS_URL', None) and redis:
+    try:
+        redis_client = redis.from_url(config.REDIS_URL)
+        redis_client.ping()
+    except Exception as e:
+        print(f"Failed to connect to standard Redis: {e}")
+        redis_client = None
+
 
 # ── Plan Definitions ─────────────────────────────────────────────────────────
 
@@ -42,9 +69,22 @@ _lock = threading.Lock()
 # ── Internal Helpers ─────────────────────────────────────────────────────────
 
 def _load_dict(key, fallback):
+    if redis_client:
+        try:
+            val = redis_client.get(key)
+            if val:
+                return json.loads(val)
+            return {}
+        except Exception:
+            pass
     return fallback
 
 def _save_dict(key, data, fallback):
+    if redis_client:
+        try:
+            redis_client.set(key, json.dumps(data))
+        except Exception:
+            pass
     if data is not fallback:
         fallback.clear()
         fallback.update(data)
