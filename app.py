@@ -522,6 +522,11 @@ def verify_payment():
     elif 'unlimited' in order_id: plan = 'unlimited'
     
     api_key = credit_manager.generate_api_key(plan)
+    
+    # If the user is logged in (identifier is an email), link the plan to their account
+    identifier = get_user_identifier()
+    if '@' in identifier:
+        credit_manager.set_user_plan(identifier, plan)
 
     return jsonify({
         "status": "success",

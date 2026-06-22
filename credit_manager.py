@@ -28,6 +28,9 @@ _usage_store = {}
 # API key store: {api_key: {plan: str, created: str}}
 _api_key_store = {}
 
+# User plans store: {identifier: plan_name}
+_user_plans = {}
+
 _lock = threading.Lock()
 
 
@@ -38,30 +41,47 @@ def _today():
     return date.today().isoformat()
 
 
-def _get_or_create_entry(identifier, plan='free'):
+def set_user_plan(identifier, plan):
+    """Set an active plan for a user identifier."""
+    with _lock:
+        _user_plans[identifier] = plan
+        
+        # Immediately update their current credits if they exist for today
+        today = _today()
+        entry = _usage_store.get(identifier)
+        if entry and entry['date'] == today and entry['plan'] != plan:
+            daily_limit = PLAN_CREDITS.get(plan, PLAN_CREDITS['free'])
+            entry['plan'] = plan
+            entry['daily_limit'] = daily_limit
+            entry['credits'] = daily_limit
+
+
+def _get_or_create_entry(identifier, plan=None):
     """
     Get the usage entry for an identifier, creating or resetting it if needed.
     Daily credits reset when the date changes.
     """
     today = _today()
-    daily_limit = PLAN_CREDITS.get(plan, PLAN_CREDITS['free'])
 
     with _lock:
+        active_plan = plan or _user_plans.get(identifier, 'free')
+        daily_limit = PLAN_CREDITS.get(active_plan, PLAN_CREDITS['free'])
+
         entry = _usage_store.get(identifier)
 
         if entry is None or entry['date'] != today:
             # New user or new day — reset credits
             _usage_store[identifier] = {
                 'credits': daily_limit,
-                'plan': plan,
+                'plan': active_plan,
                 'daily_limit': daily_limit,
                 'date': today,
             }
             return _usage_store[identifier]
 
         # Existing entry for today — update plan if it changed
-        if entry['plan'] != plan:
-            entry['plan'] = plan
+        if entry['plan'] != active_plan:
+            entry['plan'] = active_plan
             entry['daily_limit'] = daily_limit
             entry['credits'] = daily_limit
 
@@ -70,7 +90,7 @@ def _get_or_create_entry(identifier, plan='free'):
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def get_credits(identifier, plan='free'):
+def get_credits(identifier, plan=None):
     """
     Get remaining credits for an identifier (IP address or API key).
 
@@ -85,7 +105,7 @@ def get_credits(identifier, plan='free'):
     }
 
 
-def use_credit(identifier, plan='free'):
+def use_credit(identifier, plan=None):
     """
     Deduct 1 credit from an identifier.
 
